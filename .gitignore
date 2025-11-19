@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv
+env/
+venv/
+
+# Data & Models (不要上传大文件)
+checkpoints/
+outputs/
+*.pt
+*.bin
+*.safetensors
+wandb/
+
+# OS
+.DS_Store
+
+# HuggingFace 数据集缓存
+*.arrow
+data/
+
+
