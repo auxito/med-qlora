@@ -1,4 +1,3 @@
-# eval_collect.py  —— 医学问答评测版
 import os
 import json
 import argparse
@@ -30,7 +29,7 @@ def load_questions(path: str):
 
 
 def build_prompt(tokenizer, question: str) -> str:
-    """用 chat 模板构造“医学助手”风格提示。"""
+    """构造“医学助手”风格提示。"""
     messages = [
         {
             "role": "system",
@@ -103,7 +102,7 @@ def load_4bit_base_model():
     )
     tokenizer.pad_token = tokenizer.eos_token
 
-    print(">>> 以 4bit 方式加载基座模型...")
+    print(">>> 加载基座模型...")
     bnb_config = BitsAndBytesConfig(
         load_in_4bit=True,
         bnb_4bit_quant_type="nf4",
@@ -122,8 +121,8 @@ def load_4bit_base_model():
 
 
 def load_4bit_lora_model(adapter_dir: str):
-    """基于相同 base 模型 + LoRA 适配器加载 finetune 模型。"""
-    print(">>> 从 LoRA 目录加载 tokenizer（本地）...")
+    """加载 finetune 模型。"""
+    print(">>> 从 LoRA 目录加载 tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(
         adapter_dir,
         use_fast=False,
@@ -138,7 +137,7 @@ def load_4bit_lora_model(adapter_dir: str):
         bnb_4bit_use_double_quant=True,
     )
 
-    print(">>> 以 4bit 方式加载基座模型（本地缓存）...")
+    print(">>> 加载基座模型...")
     base_model = AutoModelForCausalLM.from_pretrained(
         BASE_MODEL,
         quantization_config=bnb_config,
@@ -160,7 +159,7 @@ def main():
     parser.add_argument(
         "--questions_path",
         type=str,
-        default="zh_med.json",  # ✅ 改成医学问题文件
+        default="zh_med.json", 
         help="老师提供的 20 个医学问题的 JSON 文件路径",
     )
     parser.add_argument(
@@ -172,29 +171,24 @@ def main():
     parser.add_argument(
         "--output_path",
         type=str,
-        default="eval_E1_med.json",  # ✅ 医学版输出
+        default="eval_E1_med.json",  
         help="保存 baseline / finetune 回答的 JSON 文件路径",
     )
     args = parser.parse_args()
 
-    # 1. 读问题
     questions = load_questions(args.questions_path)
 
-    # 2. baseline: 原始 Qwen3-4B
-    print("\n=== 生成 baseline（原始 Qwen3-4B）回答 ===")
+    print("\n=== 生成 baseline回答 ===")
     tokenizer_base, model_base = load_4bit_base_model()
     base_answers = generate_answers(tokenizer_base, model_base, questions)
 
-    # 释放显存
     del model_base
     torch.cuda.empty_cache()
 
-    # 3. finetune: 你训练好的 LoRA 模型
-    print("\n=== 生成 finetune（Qwen3-4B-med-QLoRA）回答 ===")
+    print("\n=== 生成 finetune 回答 ===")
     tokenizer_ft, model_ft = load_4bit_lora_model(args.adapter_dir)
     ft_answers = generate_answers(tokenizer_ft, model_ft, questions)
 
-    # 4. 汇总 & 保存
     results = []
     for item, base_ans, ft_ans in zip(questions, base_answers, ft_answers):
         results.append(
@@ -212,8 +206,7 @@ def main():
     with open(args.output_path, "w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
-    print(f"\n>>> 已保存 evaluation 数据到: {args.output_path}")
-    print("你可以把其中的 question / base_answer / finetune_answer 拿去让 ChatGPT 做主观评价。")
+    print(f"\n>>> 已保存数据到: {args.output_path}")
 
 
 if __name__ == "__main__":

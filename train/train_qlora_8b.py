@@ -1,4 +1,3 @@
-# train_qlora_8b.py
 import os
 import torch
 from datasets import load_from_disk
@@ -15,13 +14,10 @@ from peft import LoraConfig, get_peft_model
 
 # ===== 1. 基座模型 & 数据路径 =====
 
-# 本地 Qwen3-8B 模型路径（使用 ~ 展开）
 MODEL_PATH = os.path.expanduser("~/models/Qwen3-8B")
 
-# 已经用 prepare_data.py 处理好的数据集
 DATASET_DISK_PATH = "data/huatuo_qwen3"
 
-# 8B 实验的新输出目录
 OUTPUT_DIR = "checkpoints/qwen3-8b-med-qlora"
 
 
@@ -52,7 +48,6 @@ def get_lora_config():
 
 # ===== 4. tokenize 函数 =====
 def tokenize_function(examples, tokenizer, max_length: int):
-    # 假设数据集有 "text" 字段
     return tokenizer(
         examples["text"],
         max_length=max_length,
@@ -63,7 +58,6 @@ def tokenize_function(examples, tokenizer, max_length: int):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 小优化：开启 TF32
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
@@ -110,7 +104,7 @@ def main():
     )
 
     # ----- 2. 加载 8B 4bit 模型 -----
-    print(">>> [8B] 以 4bit 量化方式加载基座模型（Qwen3-8B, QLoRA）...")
+    print(">>> 加载基座模型（Qwen3-8B, QLoRA）...")
     bnb_config = get_bnb_config()
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -122,12 +116,11 @@ def main():
     model.config.use_cache = False  # 配合 gradient_checkpointing
 
     # ----- 3. 注入 LoRA -----
-    print(">>> [8B] 注入 LoRA 适配器...")
+    print(">>> 注入 LoRA 适配器...")
     lora_config = get_lora_config()
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # 关键：让输入参与梯度计算，避免 "does not require grad" 报错
     model.enable_input_require_grads()
 
     # ----- 4. Data collator -----
@@ -136,12 +129,12 @@ def main():
         mlm=False,
     )
 
-    # ----- 5. 训练参数（适配 8B + 3090） -----
+    # ----- 5. 训练参数 -----
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        per_device_train_batch_size=2,   # 单卡 2，比 4B 更保守
+        per_device_train_batch_size=2,   
         per_device_eval_batch_size=2,
-        gradient_accumulation_steps=8,   # 有效 batch = 2*8=16
+        gradient_accumulation_steps=8,  
         num_train_epochs=1.0,            
         learning_rate=2e-4,
         lr_scheduler_type="cosine",
@@ -172,21 +165,13 @@ def main():
     last_checkpoint = None
     if os.path.isdir(OUTPUT_DIR):
         last_checkpoint = get_last_checkpoint(OUTPUT_DIR)
-        if last_checkpoint is not None:
-            print(f">>> [8B] 检测到已有 checkpoint, 将从 {last_checkpoint} 恢复训练...")
-        else:
-            print(">>> [8B] 未检测到现有 checkpoint, 将从头开始训练...")
-    else:
-        print(">>> [8B] 输出目录不存在, 将从头开始训练...")
 
-    print(">>> [8B] 开始训练 QLoRA (Qwen3-8B, 1 epoch)...")
     if last_checkpoint is not None:
         trainer.train(resume_from_checkpoint=last_checkpoint)
     else:
         trainer.train()
 
     # ----- 7. 保存适配器和 tokenizer -----
-    print(">>> [8B] 保存 LoRA 适配器和 tokenizer...")
     trainer.model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
 

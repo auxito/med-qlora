@@ -1,4 +1,3 @@
-# train_qlora_e2.py
 import os
 import torch
 from datasets import load_from_disk
@@ -16,7 +15,6 @@ from peft import LoraConfig, get_peft_model
 MODEL_NAME = "Qwen/Qwen3-4B-Instruct-2507"
 DATASET_DISK_PATH = "data/huatuo_qwen3"
 
-# ✅ 新的输出目录（E2 实验）
 OUTPUT_DIR = "checkpoints/qwen3-med-qlora-E2"
 
 
@@ -24,7 +22,7 @@ OUTPUT_DIR = "checkpoints/qwen3-med-qlora-E2"
 def get_bnb_config():
     return BitsAndBytesConfig(
         load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",          # QLoRA 推荐
+        bnb_4bit_quant_type="nf4",         
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
@@ -46,7 +44,6 @@ def get_lora_config():
 
 
 def tokenize_function(examples, tokenizer, max_length: int):
-    # 对 text 做标准自回归 tokenization（只管 input_ids / attention_mask，labels 交给 collator）
     return tokenizer(
         examples["text"],
         max_length=max_length,
@@ -57,19 +54,17 @@ def tokenize_function(examples, tokenizer, max_length: int):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 小优化：开启 TF32（3090 支持），加速矩阵运算
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
     # 1. 加载 tokenizer & 数据
     print(">>> [E2] 加载 tokenizer 和数据集...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
-    tokenizer.pad_token = tokenizer.eos_token  # 保证有 pad_token
-    tokenizer.model_max_length = 512           # 3090 可以轻松撑住 512
+    tokenizer.pad_token = tokenizer.eos_token  
+    tokenizer.model_max_length = 512        
 
     datasets = load_from_disk(DATASET_DISK_PATH)
 
-    # 和 E1 一样：40k train / 2k val
     MAX_TRAIN_SAMPLES = 40_000
     MAX_EVAL_SAMPLES = 2_000
 
@@ -105,7 +100,7 @@ def main():
     )
 
     # 3. 加载 4bit 量化模型
-    print(">>> [E2] 以 4bit 量化方式加载基座模型（QLoRA）...")
+    print(">>> 加载基座模型（QLoRA）...")
     bnb_config = get_bnb_config()
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -114,16 +109,14 @@ def main():
         device_map="auto",
     )
 
-    # 关闭缓存（保持和 Trainer 配置一致）
     model.config.use_cache = False
 
     # 4. 注入 LoRA
-    print(">>> [E2] 注入 LoRA 适配器...")
+    print(">>> [注入 LoRA 适配器...")
     lora_config = get_lora_config()
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # Data collator：自回归 LM（不使用 MLM），自动把 labels 设为 input_ids 拷贝
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm=False,
@@ -132,13 +125,13 @@ def main():
     # 5. 训练参数（关键：learning_rate 调小）
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        per_device_train_batch_size=4,    # 和 E1 一样
+        per_device_train_batch_size=4,   
         per_device_eval_batch_size=4,
-        gradient_accumulation_steps=4,    # 有效 batch_size = 4*4 = 16
-        num_train_epochs=1.0,             # 仍然 1 epoch，不变
-        learning_rate=1e-4,               # ✅ 比 E1 更小：2e-4 -> 1e-4
+        gradient_accumulation_steps=4,   
+        num_train_epochs=1.0,             
+        learning_rate=1e-4,             
         lr_scheduler_type="cosine",
-        warmup_ratio=0.05,                # ✅ 稍微增加 warmup，更平滑
+        warmup_ratio=0.05,              
         logging_steps=20,
         eval_strategy="steps",
         eval_steps=500,
@@ -152,7 +145,6 @@ def main():
     )
 
     # 6. 用 Trainer 训练（支持断点续训）
-    print(">>> [E2] 创建 Trainer...")
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -162,24 +154,15 @@ def main():
         data_collator=data_collator,
     )
 
-    # 如果已经有 checkpoint，就从最近的恢复
     last_checkpoint = None
     if os.path.isdir(OUTPUT_DIR):
         last_checkpoint = get_last_checkpoint(OUTPUT_DIR)
-        if last_checkpoint is not None:
-            print(f">>> [E2] 检测到已有 checkpoint, 将从 {last_checkpoint} 恢复训练...")
-        else:
-            print(">>> [E2] 未检测到现有 checkpoint, 将从头开始训练...")
-    else:
-        print(">>> [E2] 输出目录不存在, 将从头开始训练...")
 
-    print(">>> [E2] 开始训练 QLoRA (4B, lr=1e-4)...")
     if last_checkpoint is not None:
         trainer.train(resume_from_checkpoint=last_checkpoint)
     else:
         trainer.train()
 
-    print(">>> [E2] 保存 LoRA 适配器和 tokenizer...")
     trainer.model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
 

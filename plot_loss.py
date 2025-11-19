@@ -48,13 +48,10 @@ def main():
     parser.add_argument("--e3_dir", type=str, default="./checkpoints/qwen3-8b-med-qlora")
     parser.add_argument("--out_path", type=str, default="./outputs/analysis/loss.png")
     
-    # === 放大区域参数 ===
-    # 注意：Train loss 可能比 Eval loss 低，所以 Y 轴范围可能要设大一点
     parser.add_argument("--zoom_x_min", type=float, default=1000)
     parser.add_argument("--zoom_x_max", type=float, default=2500)
-    parser.add_argument("--zoom_y_min", type=float, default=1.38) # 稍微调低一点以容纳 Train loss
-    parser.add_argument("--zoom_y_max", type=float, default=1.52) # 稍微调高一点
-    
+    parser.add_argument("--zoom_y_min", type=float, default=1.38) 
+    parser.add_argument("--zoom_y_max", type=float, default=1.52) 
     args = parser.parse_args()
     
     # 确保输出目录存在
@@ -83,21 +80,17 @@ def main():
 
         # === 1. 绘制 Train Loss (虚线) ===
         if train_steps:
-            # 主图：虚线，透明度 0.5 (看得见，但不抢眼)
             ax.plot(train_steps, train_losses, linestyle='--', color=color, 
                     alpha=0.5, linewidth=1, label=f"{label} (Train)")
             
-            # 放大图：也要画 Train！
             axins.plot(train_steps, train_losses, linestyle='--', color=color, 
                        alpha=0.6, linewidth=1.5)
 
         # === 2. 绘制 Eval Loss (实线) ===
         if eval_steps:
-            # 主图：实线
             ax.plot(eval_steps, eval_losses, linestyle='-', color=color, 
                     alpha=1.0, linewidth=2, label=f"{label} (Eval)")
             
-            # 放大图：也要画 Eval！
             axins.plot(eval_steps, eval_losses, linestyle='-', color=color, 
                        alpha=1.0, linewidth=2)
 
@@ -106,7 +99,6 @@ def main():
     ax.set_ylabel("Loss", fontsize=12)
     ax.set_title("Training & Evaluation Loss Curves", fontsize=14)
     
-    # 图例：因为有6条线，分成2列显示比较整齐
     ax.legend(loc='upper right', fontsize=9, frameon=True, ncol=1) 
     ax.grid(True, alpha=0.3)
 

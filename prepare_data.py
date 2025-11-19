@@ -1,4 +1,3 @@
-# prepare_data.py
 import os
 from datasets import load_dataset, DatasetDict
 from transformers import AutoTokenizer
@@ -17,8 +16,6 @@ def load_and_split():
     ds = ds.shuffle(seed=42)
 
     print("过滤后样本数:", len(ds))
-
-    # 默认划分：40k train, 2k val, 1k test（如果数据不够就全用）
     train_size = min(40000, max(0, len(ds) - 3000))
     val_size = min(2000, max(0, len(ds) - train_size))
     test_size = min(1000, max(0, len(ds) - train_size - val_size))
@@ -34,7 +31,7 @@ def load_and_split():
 
 
 def format_with_qwen_template(raw_datasets: DatasetDict):
-    print(">>> 加载 tokenizer，用于构造对话模板...")
+    print(">>> 加载 tokenizer...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
 
     def format_example(example):
@@ -68,7 +65,6 @@ def format_with_qwen_template(raw_datasets: DatasetDict):
         )
         return {"text": text}
 
-    print(">>> 使用 Qwen3 chat 模板格式化文本...")
     new_datasets = {}
     for split, ds in raw_datasets.items():
         new_datasets[split] = ds.map(
@@ -88,7 +84,6 @@ def main():
     print(f">>> 保存到磁盘: {save_path}")
     formatted.save_to_disk(save_path)
 
-    print("完成！数据已保存到:", save_path)
 
 
 if __name__ == "__main__":

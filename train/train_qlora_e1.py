@@ -1,4 +1,3 @@
-# train_qlora.py
 import os
 import torch
 from datasets import load_from_disk
@@ -22,7 +21,7 @@ OUTPUT_DIR = "checkpoints/qwen3-med-qlora-E1"
 def get_bnb_config():
     return BitsAndBytesConfig(
         load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",          # QLoRA 推荐
+        bnb_4bit_quant_type="nf4",         
         bnb_4bit_compute_dtype=torch.float16,
         bnb_4bit_use_double_quant=True,
     )
@@ -44,7 +43,6 @@ def get_lora_config():
 
 
 def tokenize_function(examples, tokenizer, max_length: int):
-    # 对 text 做标准自回归 tokenization（只管 input_ids / attention_mask，labels 交给 collator）
     return tokenizer(
         examples["text"],
         max_length=max_length,
@@ -55,19 +53,17 @@ def tokenize_function(examples, tokenizer, max_length: int):
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 小优化：开启 TF32（3090 支持），加速矩阵运算
     torch.backends.cuda.matmul.allow_tf32 = True
     torch.backends.cudnn.allow_tf32 = True
 
     # 1. 加载 tokenizer & 数据
     print(">>> 加载 tokenizer 和数据集...")
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=False)
-    tokenizer.pad_token = tokenizer.eos_token  # 保证有 pad_token
-    tokenizer.model_max_length = 512           # 3090 可以轻松撑住 512
+    tokenizer.pad_token = tokenizer.eos_token  
+    tokenizer.model_max_length = 512          
 
     datasets = load_from_disk(DATASET_DISK_PATH)
 
-    # 默认用 40k train / 2k val，如果不够就用全部
     MAX_TRAIN_SAMPLES = 40_000
     MAX_EVAL_SAMPLES = 2_000
 
@@ -103,7 +99,7 @@ def main():
     )
 
     # 3. 加载 4bit 量化模型
-    print(">>> 以 4bit 量化方式加载基座模型（QLoRA）...")
+    print(">>> 加载基座模型（QLoRA）...")
     bnb_config = get_bnb_config()
 
     model = AutoModelForCausalLM.from_pretrained(
@@ -112,7 +108,6 @@ def main():
         device_map="auto",
     )
 
-    # 关闭缓存（保持和 Trainer 配置一致）
     model.config.use_cache = False
 
     # 4. 注入 LoRA
@@ -121,7 +116,6 @@ def main():
     model = get_peft_model(model, lora_config)
     model.print_trainable_parameters()
 
-    # Data collator：自回归 LM（不使用 MLM），自动把 labels 设为 input_ids 拷贝
     data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm=False,
@@ -130,10 +124,10 @@ def main():
     # 5. 训练参数（为 3090 调的）
     training_args = TrainingArguments(
         output_dir=OUTPUT_DIR,
-        per_device_train_batch_size=4,    # 3090 显存足够，可以上到 4
+        per_device_train_batch_size=4,    
         per_device_eval_batch_size=4,
-        gradient_accumulation_steps=4,    # 有效 batch_size = 4*4 = 16
-        num_train_epochs=1.0,             # 先跑 1 epoch，够写作业了
+        gradient_accumulation_steps=4,    
+        num_train_epochs=1.0,            
         learning_rate=2e-4,
         lr_scheduler_type="cosine",
         warmup_ratio=0.03,
@@ -145,12 +139,11 @@ def main():
         save_total_limit=3,
         bf16=False,
         fp16=True,
-        gradient_checkpointing=False,     # 先关掉，避免前面那个 grad_fn 报错
-        report_to=[],                     # 不用 wandb 等 logger
+        gradient_checkpointing=False,     
+        report_to=[],                  
     )
 
     # 6. 用 Trainer 训练
-    print(">>> 创建 Trainer...")
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -160,24 +153,15 @@ def main():
         data_collator=data_collator,
     )
 
-    # 检查是否已有 checkpoint，若有则自动从最近的恢复
     last_checkpoint = None
     if os.path.isdir(OUTPUT_DIR):
         last_checkpoint = get_last_checkpoint(OUTPUT_DIR)
-        if last_checkpoint is not None:
-            print(f">>> 检测到已有 checkpoint, 将从 {last_checkpoint} 恢复训练...")
-        else:
-            print(">>> 未检测到现有 checkpoint, 将从头开始训练...")
-    else:
-        print(">>> 输出目录不存在, 将从头开始训练...")
-
-    print(">>> 开始训练 QLoRA (3090 版)...")
+        
     if last_checkpoint is not None:
         trainer.train(resume_from_checkpoint=last_checkpoint)
     else:
         trainer.train()
 
-    print(">>> 保存 LoRA 适配器和 tokenizer...")
     trainer.model.save_pretrained(OUTPUT_DIR)
     tokenizer.save_pretrained(OUTPUT_DIR)
 
