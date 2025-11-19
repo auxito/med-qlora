@@ -1,10 +1,8 @@
-# analyze/text_stats.py
 import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 
-# 实验到 eval 文件的映射（注意路径在 outputs/）
 EVAL_FILES = {
     "4b_E1": "eval_E1_med.json",
     "4b_E2": "eval_E2_med.json",
@@ -30,7 +28,7 @@ CUSTOMER_TEMPLATES = [
     "祝您健康",
     "祝您生活愉快",
     "谢谢！",
-    "😊",               # 4B-E2 模型非常喜欢用 emoji
+    "😊",               
     "我会尽力",
     "如果有其他问题",
     "如果有任何疑问",
@@ -44,15 +42,15 @@ DISCLAIMER_TEMPLATES = [
     "建议咨询",
     "请咨询医生",
     "具体情况请",
-    "以当地卫生部门",  # 针对 8B 模型中出现的“以当地...为准”
-    "注：",            # 很多免责声明以“注：”开头
+    "以当地卫生部门",  
+    "注：",       
     "注意：",
     "遵医嘱",
 ]
 
 
 def get_paths():
-    root = Path(__file__).resolve().parents[1]  # hw3/
+    root = Path(__file__).resolve().parents[1]  
     outputs_dir = root / "outputs"
     analysis_dir = outputs_dir / "analysis"
     analysis_dir.mkdir(parents=True, exist_ok=True)

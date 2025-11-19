@@ -1,4 +1,3 @@
-# analyze/plot_winrate.py
 import json
 from collections import Counter
 from pathlib import Path
@@ -44,7 +43,6 @@ def summarize_counts(judgements):
 
 
 def plot_winrate(summary, save_path):
-    # 只画存在于 summary 里的实验
     exp_keys = ["4b_E1", "4b_E2", "8b_E3", "4b_best_vs_8b"]
     exp_keys = [k for k in exp_keys if k in summary]
 

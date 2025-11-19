@@ -1,4 +1,3 @@
-# analyze/summarize_judgements.py
 import json
 from collections import Counter
 from pathlib import Path
@@ -13,7 +12,7 @@ EXP_NAME = {
 
 def get_paths():
     """统一管理路径，保证无论从哪里运行都OK"""
-    root = Path(__file__).resolve().parents[1]  # hw3/
+    root = Path(__file__).resolve().parents[1]  
     analyze_dir = root / "analyze"
     return root, analyze_dir
 
